@@ -20,8 +20,10 @@ model User {
   image         String?
   createdAt     DateTime
   updatedAt     DateTime
+  lastActiveOrganizationId String?  // denormalized pointer, not a hard FK constraint
   sessions      Session[]
   accounts      Account[]
+  organizations OrganizationMember[]
 
   @@unique([email])
   @@map("user")
@@ -70,4 +72,89 @@ model Verification {
   updatedAt  DateTime?
 
   @@map("verification")
+}
+
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  members       OrganizationMember[]
+  socialAccounts SocialAccount[]
+  posts         Post[]
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  role           Role     @default(MEMBER) // OWNER, ADMIN, MEMBER
+  user           User     @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model SocialAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  platform       Platform // FACEBOOK, INSTAGRAM, TWITTER
+  externalId     String   // page id / IG business account id / X user id
+  name           String   // display name of the page/profile
+  accessToken    String   @db.Text // ENCRYPTED
+  refreshToken   String?  @db.Text
+  tokenExpiresAt DateTime?
+  status         SocialAccountStatus
+  metadata       Json?    // platform-specific extras
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  postTargets    PostTarget[]
+}
+
+model Post {
+  id             String   @id @default(cuid())
+  organizationId String
+  authorId       String
+  content        String   @db.Text
+  mediaUrls      String[] // or a separate Media model
+  status         PostStatus @default(DRAFT) // DRAFT, SCHEDULED, PUBLISHING, PUBLISHED, FAILED
+  scheduledAt    DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  targets        PostTarget[]
+  createdAt      DateTime @default(now())
+}
+
+// One post -> many platforms. Each target tracks its own status independently.
+model PostTarget {
+  id              String   @id @default(cuid())
+  postId          String
+  socialAccountId String
+  status          PostStatus @default(SCHEDULED)
+  platformPostId  String?  // ID returned after successful publish
+  errorMessage    String?
+  publishedAt     DateTime?
+  post            Post @relation(fields: [postId], references: [id])
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id])
+}
+
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+  TWITTER
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  PARTIALLY_PUBLISHED
+}
+
+enum Role {
+  OWNER
+  ADMIN 
+  MEMBER
+}
+
+enum SocialAccountStatus {
+  NEEDS_RECONNECTION
+  CONNECTED
 }

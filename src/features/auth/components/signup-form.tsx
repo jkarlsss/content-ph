@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,10 +18,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
+import { signUp } from "../../../lib/auth-client";
 
 const formSchema = z.object({
   fullname: z
@@ -53,22 +59,42 @@ export function SignupForm({
       confirmPassword: "",
     },
   });
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  function onSubmit(data: z.infer<typeof formSchema>) {
-    toast("You submitted the following values:", {
-      description: (
-        <pre className="mt-2 w-[320px] overflow-x-auto rounded-md bg-code p-4 text-code-foreground">
-          <code>{JSON.stringify(data, null, 2)}</code>
-        </pre>
-      ),
-      position: "bottom-right",
-      classNames: {
-        content: "flex flex-col gap-2",
+  async function onSubmit(data: z.infer<typeof formSchema>) {
+    if (!data) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    if (data.password !== data.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    await signUp.email(
+      {
+        name: data.fullname,
+        email: data.email,
+        password: data.password,
       },
-      style: {
-        "--border-radius": "calc(var(--radius)  + 4px)",
-      } as React.CSSProperties,
-    });
+      {
+        onRequest: () => {
+          setLoading(true);
+        },
+        onSuccess: () => {
+          //redirect to the dashboard or sign in page
+          router.push("/dashboard");
+          toast.success("Account created successfully");
+        },
+        onError: (ctx) => {
+          // display the error message
+          toast.error(ctx.error.message);
+          setLoading(false);
+        },
+      },
+    );
   }
 
   return (
@@ -88,9 +114,7 @@ export function SignupForm({
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="form-fullname">
-                      Full Name
-                    </FieldLabel>
+                    <FieldLabel htmlFor="form-fullname">Full Name</FieldLabel>
                     <Input
                       {...field}
                       id="form-fullname"
@@ -108,9 +132,7 @@ export function SignupForm({
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="form-email">
-                      Email
-                    </FieldLabel>
+                    <FieldLabel htmlFor="form-email">Email</FieldLabel>
                     <Input
                       {...field}
                       id="form-email"
@@ -125,25 +147,66 @@ export function SignupForm({
               />
               <Field>
                 <Field className="grid grid-cols-2 gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <Input id="password" type="password" required />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="confirm-password">
-                      Confirm Password
-                    </FieldLabel>
-                    <Input id="confirm-password" type="password" required />
-                  </Field>
+                  <Controller
+                    name="password"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <Field data-invalid={fieldState.invalid}>
+                        <FieldLabel htmlFor="form-password">
+                          Password
+                        </FieldLabel>
+                        <Input
+                          {...field}
+                          type="password"
+                          id="form-password"
+                          aria-invalid={fieldState.invalid}
+                          placeholder="enter password"
+                        />
+                        {fieldState.invalid && (
+                          <FieldError errors={[fieldState.error]} />
+                        )}
+                      </Field>
+                    )}
+                  />
+                  <Controller
+                    name="confirmPassword"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <Field data-invalid={fieldState.invalid}>
+                        <FieldLabel htmlFor="form-confirm-password">
+                          Confirm Password
+                        </FieldLabel>
+                        <Input
+                          {...field}
+                          type="password"
+                          id="form-confirm-password"
+                          aria-invalid={fieldState.invalid}
+                          placeholder="Confirm Password"
+                        />
+                        {fieldState.invalid && (
+                          <FieldError errors={[fieldState.error]} />
+                        )}
+                      </Field>
+                    )}
+                  />
                 </Field>
                 <FieldDescription>
                   Must be at least 8 characters long.
                 </FieldDescription>
               </Field>
               <Field>
-                <Button type="submit">Create Account</Button>
+                <Button disabled={loading} type="submit">
+                  {loading ? (
+                    <>
+                      <Loader className="animate-spin" />
+                      <span className="ml-2">Creating Account...</span>
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
+                </Button>
                 <FieldDescription className="text-center">
-                  Already have an account? <Link href="/signin">Sign in</Link>
+                  Already have an account? <Link href="/sign-in">Sign in</Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>
