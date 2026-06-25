@@ -1,26 +1,27 @@
 import { headers } from "next/headers";
-import { auth } from "./auth";
 import { redirect } from "next/navigation";
+import { auth } from "./auth";
 
 export const requireAuth = async () => {
-
   const session = await auth.api.getSession({
-    headers: await headers() // you need to pass the headers object.
-  })
-
-  if (session) {
-    return redirect("/dashboard");
-  }
-
-}
-
-export const requireNoAuth = async () => {
-
-  const session = await auth.api.getSession({
-    headers: await headers() // you need to pass the headers object.
-  })
+    headers: await headers(),
+  });
 
   if (!session) {
     redirect("/sign-in");
   }
+
+  return session;
+};
+
+export const requireNoAuth = async () => {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (session) {
+    redirect("/dashboard");
+  }
+
+  return session;
 };

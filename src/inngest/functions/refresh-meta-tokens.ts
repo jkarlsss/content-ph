@@ -1,51 +1,65 @@
-// inngest/functions/refresh-meta-tokens.ts
-import { exchangeForLongLivedToken } from "@/lib/meta-oauth";
-import { addDays } from "date-fns";
+// server/inngest/functions/refresh-meta-tokens.ts
 import { decrypt, encrypt } from "../../lib/encryption";
 import prisma from "../../lib/prisma";
 import { inngest } from "../client";
+import { exchangeForLongLivedToken } from "@/lib/meta-oauth";
 
+// Meta's long-lived user tokens last ~60 days, and re-exchanging a still-valid
+// long-lived token for a fresh one just resets that clock — no user
+// interaction needed, as long as we do it before expiry. Run daily and
+// refresh anything expiring within the next 7 days.
 export const refreshMetaTokens = inngest.createFunction(
   {
     id: "refresh-meta-tokens",
-    triggers: {
-      cron: "0 6 * * *", // every day at 6am
-    },
+    retries: 2,
+    triggers: { cron: "0 6 * * *" }, // 06:00 UTC daily
   },
   async ({ step }) => {
-    const expiringSoon = await step.run("find-expiring", () =>
-      prisma.socialAccount.findMany({
+    const expiringSoon = await step.run("find-expiring-connections", () =>
+      prisma.metaConnection.findMany({
         where: {
-          platform: { in: ["FACEBOOK", "INSTAGRAM"] },
-          tokenExpiresAt: { lte: addDays(new Date(), 7) },
+          status: "ACTIVE",
+          tokenExpiresAt: { lt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
         },
-      }),
+        select: { id: true, accessTokenEnc: true },
+      })
     );
 
-    for (const account of expiringSoon) {
-      await step.run(`refresh-${account.id}`, async () => {
-        try {
-          const currentToken = decrypt(account.accessToken);
-          const refreshed = await exchangeForLongLivedToken(currentToken);
+    const results = await Promise.all(
+      expiringSoon.map((conn) =>
+        step.run(`refresh-${conn.id}`, async () => {
+          try {
+            const current = decrypt(conn.accessTokenEnc);
+            const refreshed = await exchangeForLongLivedToken(current);
+            await prisma.metaConnection.update({
+              where: { id: conn.id },
+              data: {
+                accessTokenEnc: encrypt(refreshed.access_token),
+                tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
+                lastError: null,
+              },
+            });
+            return { id: conn.id, ok: true };
+          } catch (err) {
+            // Refresh fails if the user revoked access on Facebook's side —
+            // flag for reconnect rather than retrying indefinitely.
+            await prisma.metaConnection.update({
+              where: { id: conn.id },
+              data: {
+                status: "NEEDS_REAUTH",
+                lastError: err instanceof Error ? err.message : "Token refresh failed",
+              },
+            });
+            return { id: conn.id, ok: false };
+          }
+        })
+      )
+    );
 
-          await prisma.socialAccount.update({
-            where: { id: account.id },
-            data: {
-              accessToken: encrypt(refreshed.access_token),
-              tokenExpiresAt: addDays(
-                new Date(),
-                Math.floor(refreshed.expires_in / 86400),
-              ),
-            },
-          });
-        } catch (err) {
-          await prisma.socialAccount.update({
-            where: { id: account.id },
-            data: { status: "NEEDS_RECONNECTION" },
-          });
-          // TODO: notify user via email/in-app
-        }
-      });
-    }
-  },
+    return {
+      checked: expiringSoon.length,
+      refreshed: results.filter((r) => r.ok).length,
+      needsReauth: results.filter((r) => !r.ok).length,
+    };
+  }
 );

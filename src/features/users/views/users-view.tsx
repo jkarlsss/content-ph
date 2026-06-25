@@ -5,7 +5,7 @@ import { useTRPC } from "../../../trpc/client";
 
 export function UsersView() {
   const trpc = useTRPC();
-  const { data } = useSuspenseQuery(trpc.users.list.queryOptions({organizationId: ''}));
+  const { data } = useSuspenseQuery(trpc.users.list.queryOptions());
   return (
     <div>
       {JSON.stringify(data, null, 2)}

@@ -1,9 +1,9 @@
 // trpc/routers/posts.ts
 import prisma from "../../lib/prisma";
-import { createTRPCRouter, orgProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 export const usersRouter = createTRPCRouter({
-  list: orgProcedure.query(async ({ ctx }) => {
-    return prisma.user.findMany({});
+  list: protectedProcedure.query(async ({ ctx }) => {
+    return await prisma.user.findMany({});
   }),
 });

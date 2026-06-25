@@ -1,19 +1,19 @@
 // trpc/routers/social-accounts.ts
-import { z } from "zod";
-import { createTRPCRouter, orgProcedure } from "../init";
-import { TRPCError } from "@trpc/server";
 import {
   buildMetaOAuthUrl,
   exchangeForLongLivedToken,
-  fetchManagedPages,
   fetchInstagramAccountForPage,
+  fetchManagedPages,
 } from "@/lib/meta-oauth";
+import { TRPCError } from "@trpc/server";
 import { addDays } from "date-fns";
+import { z } from "zod";
 import { encrypt } from "../../lib/encryption";
 import prisma from "../../lib/prisma";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 export const socialAccountsRouter = createTRPCRouter({
-  list: orgProcedure
+  list: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       return prisma.socialAccount.findMany({
@@ -28,17 +28,21 @@ export const socialAccountsRouter = createTRPCRouter({
       });
     }),
 
-  getMetaConnectUrl: orgProcedure
+  getMetaConnectUrl: protectedProcedure
     .input(z.object({ organizationId: z.string() }))
     .mutation(async ({ input }) => {
-      const state = Buffer.from(JSON.stringify({ organizationId: input.organizationId })).toString("base64");
+      const state = Buffer.from(
+        JSON.stringify({ organizationId: input.organizationId }),
+      ).toString("base64");
       const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/meta/callback`;
       return { url: buildMetaOAuthUrl(redirectUri, state) };
     }),
 
   // Called after OAuth callback resolves pages — lets user pick which to connect
-  listAvailablePages: orgProcedure
-    .input(z.object({ organizationId: z.string(), shortLivedToken: z.string() }))
+  listAvailablePages: protectedProcedure
+    .input(
+      z.object({ organizationId: z.string(), shortLivedToken: z.string() }),
+    )
     .mutation(async ({ input }) => {
       const longLived = await exchangeForLongLivedToken(input.shortLivedToken);
       const pages = await fetchManagedPages(longLived.access_token);
@@ -46,14 +50,17 @@ export const socialAccountsRouter = createTRPCRouter({
       const withIg = await Promise.all(
         pages.map(async (page) => ({
           ...page,
-          instagramAccountId: await fetchInstagramAccountForPage(page.id, page.access_token),
-        }))
+          instagramAccountId: await fetchInstagramAccountForPage(
+            page.id,
+            page.access_token,
+          ),
+        })),
       );
 
       return { pages: withIg, longLivedUserToken: longLived.access_token };
     }),
 
-  connectPages: orgProcedure
+  connectPages: protectedProcedure
     .input(
       z.object({
         organizationId: z.string(),
@@ -63,9 +70,9 @@ export const socialAccountsRouter = createTRPCRouter({
             pageName: z.string(),
             pageToken: z.string(),
             instagramAccountId: z.string().optional(),
-          })
+          }),
         ),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const created = await prisma.$transaction(
@@ -95,24 +102,31 @@ export const socialAccountsRouter = createTRPCRouter({
                   accessToken: encrypt(sel.pageToken), // IG uses the same page token
                   tokenExpiresAt: addDays(new Date(), 60),
                 },
-              })
+              }),
             );
           }
           return ops;
-        })
+        }),
       );
       return { connected: created.length };
     }),
 
-  disconnect: orgProcedure
-    .input(z.object({ organizationId: z.string(), socialAccountId: z.string() }))
+  disconnect: protectedProcedure
+    .input(
+      z.object({ organizationId: z.string(), socialAccountId: z.string() }),
+    )
     .mutation(async ({ ctx, input }) => {
       const account = await prisma.socialAccount.findFirst({
-        where: { id: input.socialAccountId, organizationId: input.organizationId },
+        where: {
+          id: input.socialAccountId,
+          organizationId: input.organizationId,
+        },
       });
       if (!account) throw new TRPCError({ code: "NOT_FOUND" });
 
-      await prisma.socialAccount.delete({ where: { id: input.socialAccountId } });
+      await prisma.socialAccount.delete({
+        where: { id: input.socialAccountId },
+      });
       return { success: true };
     }),
 });

@@ -2,7 +2,6 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { headers } from "next/headers";
 import { cache } from "react";
 import { auth } from "../lib/auth";
-import prisma from "../lib/prisma";
 export const createTRPCContext = cache(async () => {
   /**
    * @see: https://trpc.io/docs/server/context
@@ -26,30 +25,38 @@ export const baseProcedure = t.procedure;
 
 export const protectedProcedure = baseProcedure.use(async ({ ctx, next }) => {
   const session = await auth.api.getSession({
-    headers: await headers(), // you need to pass the headers object.
-  });
+    headers: await headers(),
+  })
 
   if (!session) {
-    throw new Error("Unauthorized");
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'You must be logged in to access this resource',
+    });
   }
 
-  return next({ ctx: { ...ctx, session } });
-});
-
-export const orgProcedure = protectedProcedure
-  .input((val: unknown) => val as { organizationId: string })
-  .use(async ({ ctx, input, next }) => {
-    const membership = await prisma.organizationMember.findFirst({
-      where: {
-        userId: ctx.session.user.id,
-        organizationId: input.organizationId,
-      },
-    });
-    if (!membership) {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "Not a member of this organization",
-      });
-    }
-    return next({ ctx: { ...ctx, membership } });
+  return next({
+    ctx: {
+      ...ctx,
+      session
+    },
   });
+
+});
+// export const protectedProcedure = protectedProcedure
+//   .input((val: unknown) => val as { organizationId: string })
+//   .use(async ({ ctx, input, next }) => {
+//     const membership = await prisma.organizationMember.findFirst({
+//       where: {
+//         userId: ctx.session.user.id,
+//         organizationId: input.organizationId,
+//       },
+//     });
+//     if (!membership) {
+//       throw new TRPCError({
+//         code: "FORBIDDEN",
+//         message: "Not a member of this organization",
+//       });
+//     }
+//     return next({ ctx: { ...ctx, membership } });
+//   });
