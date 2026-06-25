@@ -21,6 +21,7 @@ export const auth = betterAuth({
         "pages_read_engagement",
         "pages_manage_posts",
       ],
+      redirectURI: "http://localhost:3000/api/auth/facebook/callback"
     },
   },
 });
