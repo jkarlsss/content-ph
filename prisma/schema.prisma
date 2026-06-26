@@ -13,18 +13,20 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
-  lastActiveOrganizationId String?  // denormalized pointer, not a hard FK constraint
-  sessions      Session[]
-  accounts      Account[]
-  organizations OrganizationMember[]
-  metaConnections MetaConnection[]
+  id                        String                @id
+  name                      String
+  email                     String
+  emailVerified             Boolean
+  image                     String?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  lastActiveOrganizationId  String?               // denormalized pointer, not a hard FK constraint
+  sessions                  Session[]
+  accounts                  Account[]
+  organizations             OrganizationMember[]
+  channels                  UserChannels[]
+  schedulePosts             SchedulePosts[]
+  ideas                     Ideas[]
 
   @@unique([email])
   @@map("user")
@@ -34,14 +36,15 @@ model Session {
   id        String   @id
   expiresAt DateTime
   token     String
-  createdAt DateTime
-  updatedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   ipAddress String?
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([token])
+  @@index([userId])
   @@map("session")
 }
 
@@ -58,9 +61,10 @@ model Account {
   refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
-  createdAt             DateTime
-  updatedAt             DateTime
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
+  @@index([userId])
   @@map("account")
 }
 
@@ -69,139 +73,116 @@ model Verification {
   identifier String
   value      String
   expiresAt  DateTime
-  createdAt  DateTime?
-  updatedAt  DateTime?
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
 
   @@map("verification")
 }
 
-
 model Organization {
-  id            String   @id @default(cuid())
-  name          String
-  members       OrganizationMember[]
-  socialAccounts SocialAccount[]
-  posts         Post[]
+  id      String                @id @default(cuid())
+  name    String
+  members OrganizationMember[]
+
+  @@map("organization")
 }
 
 model OrganizationMember {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   userId         String
   organizationId String
-  role           Role     @default(MEMBER) // OWNER, ADMIN, MEMBER
-  user           User     @relation(fields: [userId], references: [id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  role           Role         @default(MEMBER) // OWNER, ADMIN, MEMBER
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_member")
 }
 
-model SocialAccount {
-  id             String   @id @default(cuid())
-  organizationId String
-  platform       Platform // FACEBOOK, INSTAGRAM, TWITTER
-  externalId     String   // page id / IG business account id / X user id
-  name           String   // display name of the page/profile
-  accessToken    String   @db.Text // ENCRYPTED
-  refreshToken   String?  @db.Text
-  tokenExpiresAt DateTime?
-  status         SocialAccountStatus
-  metadata       Json?    // platform-specific extras
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  postTargets    PostTarget[]
+model UserChannels {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  channelType   ChannelType
+
+  handle        String
+  profileImage  String
+  accessToken   String
+  isConnected   Boolean
+  isActive      Boolean
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  schedulePosts SchedulePosts[]
+
+  @@index([userId])
+  @@index([channelType])
+  @@map("user_channels")
 }
 
-model Post {
-  id             String   @id @default(cuid())
-  organizationId String
-  authorId       String
-  content        String   @db.Text
-  mediaUrls      String[] // or a separate Media model
-  status         PostStatus @default(DRAFT) // DRAFT, SCHEDULED, PUBLISHING, PUBLISHED, FAILED
-  scheduledAt    DateTime?
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  targets        PostTarget[]
-  createdAt      DateTime @default(now())
-}
-
-// One post -> many platforms. Each target tracks its own status independently.
-model PostTarget {
-  id              String   @id @default(cuid())
-  postId          String
-  socialAccountId String
-  status          PostStatus @default(SCHEDULED)
-  platformPostId  String?  // ID returned after successful publish
-  errorMessage    String?
-  publishedAt     DateTime?
-  post            Post @relation(fields: [postId], references: [id])
-  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id])
-}
-
-model MetaConnection {
+model IdeaGroups {
   id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  ideas     Ideas[]
 
-  metaUserId String  // Meta's "me" id for the user who authorized the app
+  @@map("idea_groups")
+}
 
-  // Tokens are stored ENCRYPTED (see lib/crypto.ts) — never store raw tokens.
-  accessTokenEnc String  // long-lived user access token, encrypted
-  tokenExpiresAt DateTime // when the long-lived token expires (~60 days)
+model SchedulePosts {
+  id String @id @default(cuid())
 
-  scopes    String[] // granted scopes, parsed from token response if available
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  status    MetaConnectionStatus @default(ACTIVE)
-  lastSyncedAt DateTime?
-  lastError    String?
+  userChannelId String
+  userChannel   UserChannels @relation(fields: [userChannelId], references: [id], onDelete: Cascade)
 
-  pages     MetaPage[]
+  content    String
+  images     String[]
+  scheduleAt DateTime
+  timezone   String
+  status     PostStatus
+  publishAt  DateTime?
+  publishUrl String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([status])
+  @@index([userId])
+  @@index([userChannelId])
+  @@map("schedule_posts")
 }
 
-enum MetaConnectionStatus {
-  ACTIVE
-  NEEDS_REAUTH // refresh failed / token revoked — user must reconnect
-  REVOKED
+model Ideas {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   IdeaGroups @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String
+  images      String[]
+  tags        String[]
+  sortOrder   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([groupId])
+  @@map("ideas")
 }
 
-// One row per Facebook Page (+ optionally linked IG business account)
-// reachable by a given connection's user token.
-model MetaPage {
-  id           String   @id @default(cuid())
-  connectionId String
-  connection   MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-
-  pageId       String   // Facebook Page ID
-  pageName     String
-
-  // Page access tokens are long-lived already (derived from the long-lived
-  // user token) but Meta can still invalidate them — keep encrypted + refreshable.
-  pageAccessTokenEnc String
-
-  instagramBusinessAccountId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([connectionId, pageId])
-}
-
-// Short-lived row to validate the OAuth `state` param on callback.
-// TTL it (e.g. 10 min) via a cron/cleanup job or just check expiresAt.
-model MetaOAuthState {
-  state     String   @id
-  userId    String
-  redirectAfter String? // where to send the user once connect finishes
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-}
-
-
-enum Platform {
+enum ChannelType {
+  TWITTER
   FACEBOOK
   INSTAGRAM
-  TWITTER
 }
 
 enum PostStatus {
@@ -215,7 +196,7 @@ enum PostStatus {
 
 enum Role {
   OWNER
-  ADMIN 
+  ADMIN
   MEMBER
 }
 
@@ -223,4 +204,3 @@ enum SocialAccountStatus {
   NEEDS_RECONNECTION
   CONNECTED
 }
-

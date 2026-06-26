@@ -3,7 +3,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { HydrateClient, prefetch, trpc } from "../../../trpc/server";
 import { MetaConnectCard } from "../../../features/settings/views/meta-view";
 
-export default function Settings() {
+export default function SettingsPage() {
   prefetch(trpc.meta.getConnection.queryOptions());
   return (
     <HydrateClient>
