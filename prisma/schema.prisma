@@ -13,20 +13,22 @@ datasource db {
 }
 
 model User {
-  id                        String                @id
-  name                      String
-  email                     String
-  emailVerified             Boolean
-  image                     String?
-  createdAt                 DateTime              @default(now())
-  updatedAt                 DateTime              @updatedAt
-  lastActiveOrganizationId  String?               // denormalized pointer, not a hard FK constraint
-  sessions                  Session[]
-  accounts                  Account[]
-  organizations             OrganizationMember[]
-  channels                  UserChannels[]
-  schedulePosts             SchedulePosts[]
-  ideas                     Ideas[]
+  id                       String               @id
+  name                     String
+  email                    String
+  emailVerified            Boolean
+  image                    String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  lastActiveOrganizationId String? // denormalized pointer, not a hard FK constraint
+  sessions                 Session[]
+  accounts                 Account[]
+  organizations            OrganizationMember[]
+  channels                 UserChannels[]
+  schedulePosts            SchedulePosts[]
+  ideas                    Idea[]
+  metaConnection           MetaConnection?
+  metaOAuthStates          MetaOAuthState[]
 
   @@unique([email])
   @@map("user")
@@ -80,7 +82,7 @@ model Verification {
 }
 
 model Organization {
-  id      String                @id @default(cuid())
+  id      String               @id @default(cuid())
   name    String
   members OrganizationMember[]
 
@@ -106,30 +108,21 @@ model UserChannels {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  channelType   ChannelType
+  channelType ChannelType
 
-  handle        String
-  profileImage  String
-  accessToken   String
-  isConnected   Boolean
-  isActive      Boolean
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  handle       String
+  profileImage String
+  accessToken  String
+  isConnected  Boolean
+  isActive     Boolean
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   schedulePosts SchedulePosts[]
 
   @@index([userId])
   @@index([channelType])
   @@map("user_channels")
-}
-
-model IdeaGroups {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  ideas     Ideas[]
-
-  @@map("idea_groups")
 }
 
 model SchedulePosts {
@@ -157,32 +150,94 @@ model SchedulePosts {
   @@map("schedule_posts")
 }
 
-model Ideas {
-  id String @id @default(cuid())
-
+/// A saved post brief — what the user filled into the Post Generator form,
+/// plus whatever drafts were last generated for it. Ideas belong to a single
+/// user; there is no sharing/collaboration model here yet.
+model Idea {
+  id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  groupId String
-  group   IdeaGroups @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  // --- Brief fields (1:1 with PostBrief in post-schema.ts) ---------------
+  title        String // user-facing name for this saved idea, NOT part of PostBrief
+  businessName String?
+  niche        String
+  audience     String?
 
-  title       String
-  description String
-  images      String[]
-  tags        String[]
-  sortOrder   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  platforms Platform[] // Postgres native array of the enum above
+  postType  PostType
+  tone      Tone
+  postCount Int        @default(1)
+
+  keyDetails String?
+  cta        String?
+
+  includeHashtags Boolean @default(true)
+  includeEmojis   Boolean @default(true)
+
+  // --- Last-generated drafts, if any --------------------------------------
+  // Stored as JSON rather than a separate table: drafts are a snapshot tied
+  // to one generation run, not independently queried/updated entities.
+  // Shape: GeneratedPost[] from post-schema.ts, i.e.
+  //   [{ id: string, platform: Platform, content: string }, ...]
+  generatedPosts Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
-  @@index([groupId])
-  @@map("ideas")
+  @@index([userId, createdAt])
+}
+
+model MetaConnection {
+  id             String     @id @default(cuid())
+  userId         String     @unique
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String     @default("ACTIVE") // ACTIVE, NEEDS_REAUTH, EXPIRED, etc.
+  accessTokenEnc String     @db.Text // encrypted long-lived user token
+  tokenExpiresAt DateTime? // optional: when the token expires (may be far in the future or null if non-expiring)
+  lastSyncedAt   DateTime? // when we last fetched pages
+  lastError      String?    @db.Text
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  pages          MetaPage[]
+}
+
+model MetaPage {
+  id                         String         @id @default(cuid())
+  connectionId               String
+  connection                 MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  pageId                     String         @unique // Facebook Page numeric ID
+  pageName                   String
+  accessTokenEnc             String         @db.Text // encrypted page access token (long-lived)
+  instagramBusinessAccountId String? // optional Instagram linked account ID
+  category                   String? // optional page category
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+}
+
+model MetaOAuthState {
+  id            String   @id @default(cuid())
+  state         String   @unique
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectAfter String? // URL to redirect after OAuth callback
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
 }
 
 enum ChannelType {
-  TWITTER
-  FACEBOOK
   INSTAGRAM
+  FACEBOOK
+  TWITTER
+}
+
+enum Platform {
+  INSTAGRAM
+  FACEBOOK
+  TWITTER
+  LINKEDIN
+  TIKTOK
 }
 
 enum PostStatus {
@@ -194,6 +249,16 @@ enum PostStatus {
   PARTIALLY_PUBLISHED
 }
 
+enum PostType {
+  PROMOTIONAL
+  ANNOUNCEMENT
+  ENGAGEMENT
+  EDUCATIONAL
+  BEHIND_THE_SCENES
+  TESTIMONIAL
+  SEASONAL
+}
+
 enum Role {
   OWNER
   ADMIN
@@ -203,4 +268,16 @@ enum Role {
 enum SocialAccountStatus {
   NEEDS_RECONNECTION
   CONNECTED
+}
+
+/// Mirrors the `Tone` union driving TONE_META.
+enum Tone {
+  PROFESSIONAL
+  CASUAL
+  PLAYFUL
+  LUXURY
+  URGENT
+  BOLD
+  FRIENDLY
+  WITTY
 }

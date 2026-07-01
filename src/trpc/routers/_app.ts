@@ -1,4 +1,5 @@
 import { createTRPCRouter } from "../init";
+import { ideasRouter } from "./ideas";
 import { metaRouter } from "./meta";
 import { organizationsRouter } from "./organizations";
 import { postsRouter } from "./posts";
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   users: usersRouter,
   meta: metaRouter,
   userChannels: userChannelsRouter,
+  ideas: ideasRouter
 });
 
 // export type definition of API

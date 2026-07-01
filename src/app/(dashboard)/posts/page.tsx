@@ -1,7 +1,8 @@
+import PostsView from "../../../features/posts/views/post-view";
 
 const PostPage = () => {
   return (
-    <div>PostPage</div>
+    <PostsView />
   )
 }
 
