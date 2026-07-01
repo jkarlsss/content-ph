@@ -170,6 +170,16 @@ const data = {
       icon: <FrameIcon />,
     },
     {
+      name: "Posts",
+      url: "/posts",
+      icon: <BookOpenIcon />,
+    },
+    {
+      name: "Accounts",
+      url: "/accounts",
+      icon: <FolderIcon />,
+    },
+    {
       name: "Schedule",
       url: "/schedule",
       icon: <PieChartIcon />,

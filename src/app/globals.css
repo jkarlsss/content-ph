@@ -4,6 +4,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root {
+  /* Surfaces */
+  --background: #0b0c0f;
+  --surface: #14151a;
+  --surface-raised: #1a1c22;
+  --border-subtle: #232530;
+  --border-strong: #2e313e;
+
+  /* Text */
+  --foreground: #f4f4f6;
+  --muted: #9a9ca8;
+  --muted-dim: #6b6e7a;
+
+  /* Accent — reserved for active state + primary actions */
+  --accent: #6366f1;
+  --accent-foreground: #ffffff;
+  --accent-soft: rgba(99, 102, 241, 0.12);
+  --accent-ring: rgba(99, 102, 241, 0.4);
+
+  /* Status */
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.12);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+
+  /* Platform tints — small dots/badges only, never large fields */
+  --platform-instagram: #e1306c;
+  --platform-facebook: #1877f2;
+  --platform-twitter: #e7e9ea;
+  --platform-linkedin: #0a66c2;
+  --platform-tiktok: #25f4ee;
+
+  --radius: 0.625rem;
+}
+
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

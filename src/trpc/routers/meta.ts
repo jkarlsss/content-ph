@@ -29,7 +29,7 @@ export const metaRouter = createTRPCRouter({
         },
       });
 
-      const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/meta/callback`;
+      const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/facebook/callback`;
       const url = buildMetaOAuthUrl(redirectUri, state);
 
       return { url };
@@ -84,4 +84,119 @@ export const metaRouter = createTRPCRouter({
     await prisma.metaConnection.delete({ where: { id: connection.id } });
     return { ok: true };
   }),
+  postToPage: protectedProcedure
+    .input(
+      z.object({
+        pageId: z.string().min(1), // the Facebook page numeric ID you already store
+        message: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // 1. Make sure the page actually belongs to the current user
+      const page = await prisma.metaPage.findFirst({
+        where: {
+          pageId: input.pageId,
+          connection: {
+            userId: ctx.session.user.id,
+            status: { in: ["ACTIVE", "NEEDS_REAUTH"] }, // only allow active-ish tokens
+          },
+        },
+        select: {
+          id: true,
+          accessTokenEnc: true,
+          pageId: true,
+        },
+      });
+
+      if (!page) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Page not found or you don’t have access to it",
+        });
+      }
+
+      // 2. Decrypt the page access token
+      const accessToken = decrypt(page.accessTokenEnc);
+
+      // 3. Post to Facebook Graph API v25.0
+      const res = await fetch(
+        `https://graph.facebook.com/v25.0/${page.pageId}/feed`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            message: input.message,
+            access_token: accessToken,
+          }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: data.error?.message ?? "Facebook API error",
+        });
+      }
+
+      return { postId: data.id };
+    }),
+
+  postPhotoToPage: protectedProcedure
+    .input(
+      z.object({
+        pageId: z.string().min(1),
+        message: z.string().optional(),
+        imageBase64: z.string(), // data:image/...;base64,...
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const page = await prisma.metaPage.findFirst({
+        where: {
+          pageId: input.pageId,
+          connection: {
+            userId: ctx.session.user.id,
+            status: { in: ["ACTIVE", "NEEDS_REAUTH"] },
+          },
+        },
+        select: { accessTokenEnc: true, pageId: true },
+      });
+
+      if (!page) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Page not found or you don't have access to it",
+        });
+      }
+
+      const accessToken = decrypt(page.accessTokenEnc);
+
+      const base64Data = input.imageBase64.replace(
+        /^data:image\/\w+;base64,/,
+        "",
+      );
+      const buffer = Buffer.from(base64Data, "base64");
+
+      const form = new FormData();
+      form.append("source", new Blob([buffer]), "image.jpg");
+      if (input.message) form.append("caption", input.message);
+      form.append("access_token", accessToken);
+
+      const res = await fetch(
+        `https://graph.facebook.com/v25.0/${page.pageId}/photos`,
+        { method: "POST", body: form },
+      );
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: data.error?.message ?? "Facebook API error",
+        });
+      }
+
+      return { postId: data.post_id ?? data.id };
+    }),
 });

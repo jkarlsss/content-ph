@@ -4,13 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:ngrok": "ngrok http --url=dissyllabic-unconvened-arlene.ngrok-free.dev 3000",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.2",
     "@better-auth/prisma-adapter": "^1.6.20",
+    "@bryntum/calendar": "npm:@bryntum/calendar-trial@^7.3.3",
+    "@bryntum/calendar-react": "^7.3.3",
     "@hookform/resolvers": "^5.4.0",
     "@hugeicons/core-free-icons": "^4.2.1",
     "@hugeicons/react": "^1.1.9",
@@ -20,6 +24,8 @@
     "@trpc/client": "^11.18.0",
     "@trpc/server": "^11.18.0",
     "@trpc/tanstack-react-query": "^11.18.0",
+    "@zernio/node": "^0.2.289",
+    "ai": "^7.0.4",
     "better-auth": "^1.6.20",
     "class-variance-authority": "^0.7.1",
     "client-only": "^0.0.1",
