@@ -1,13 +1,22 @@
+import { Suspense } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { MetaAutoPost } from "../../../../features/autopost/components/meta-auto-post";
-import { prefetch, trpc } from "../../../../trpc/server";
+import { HydrateClient, prefetch, trpc } from "../../../../trpc/server";
+import { requireAuth } from "../../../../lib/server";
 
-const AutoPostPage = () => {
-
+const AutoPostPage = async () => {
+  await requireAuth();
   prefetch(trpc.meta.getConnection.queryOptions());
 
   return (
-    <MetaAutoPost />
-  )
-}
+    <HydrateClient>
+      <ErrorBoundary fallback={<div>Something went wrong</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
+          <MetaAutoPost />
+        </Suspense>
+      </ErrorBoundary>
+    </HydrateClient>
+  );
+};
 
-export default AutoPostPage
+export default AutoPostPage;

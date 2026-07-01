@@ -79,7 +79,6 @@ export async function GET(request: NextRequest) {
     const longLivedToken: string = longLivedData.access_token;
     const expiresInSeconds: number = longLivedData.expires_in ?? 5184000; // ~60 days
     const tokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
-    console.log("LONG LIVED TOKEN: " + longLivedToken);
 
     // 5. Fetch user's pages
     const pagesRes = await fetch(
@@ -91,8 +90,6 @@ export async function GET(request: NextRequest) {
     if (!pagesRes.ok || pagesData.error) {
       throw new Error(pagesData.error?.message ?? "Failed to fetch pages");
     }
-
-    console.log("PAGES DATA: " + JSON.stringify(pagesData));
 
     const pages = pagesData.data as Array<{
       id: string;
