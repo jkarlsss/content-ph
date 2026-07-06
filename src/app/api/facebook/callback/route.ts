@@ -84,7 +84,6 @@ export async function GET(request: NextRequest) {
     const pagesRes = await fetch(
       `https://graph.facebook.com/me/accounts?access_token=${longLivedToken}&limit=100`,
     );
-    console.log("PAGES RES: " + JSON.stringify(pagesRes));
 
     const pagesData = await pagesRes.json();
     if (!pagesRes.ok || pagesData.error) {

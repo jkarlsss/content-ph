@@ -1,6 +1,6 @@
 import { ACCOUNT_TYPES } from "../../../constants/accounts";
 import { Platform } from "../../../generated/prisma/enums";
-import { PlatformCards } from "../components/platform-cards";
+import { PlatformCards } from "../../ideas/components/platform-cards";
 
 export default function AccountsView() {
   return (

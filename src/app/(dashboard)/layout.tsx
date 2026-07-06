@@ -1,4 +1,5 @@
 // import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import DashboardLayout from "../../features/dashboard/layouts/dashboard-layout";
 import { requireAuth } from "../../lib/server";
@@ -14,12 +15,14 @@ const Layout = async ({
 }) => {
   await requireAuth();
 
-  prefetch(trpc.userChannels.listByConnected.queryOptions({ filter: true }));
+  prefetch(trpc.channels.list.queryOptions({ filter: "unconnected" }));
 
   return (
     <HydrateClient>
       <ErrorBoundary fallback={<div>Something went wrong</div>}>
-        <DashboardLayout>{children}</DashboardLayout>
+        <Suspense fallback={<div>Loading...</div>}>
+          <DashboardLayout>{children}</DashboardLayout>
+        </Suspense>
       </ErrorBoundary>
     </HydrateClient>
   );

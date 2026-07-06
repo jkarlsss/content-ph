@@ -3,7 +3,6 @@ import { TRPCError } from "@trpc/server";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
-import { Platform } from "../../generated/prisma/enums";
 import prisma from "../../lib/prisma";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
