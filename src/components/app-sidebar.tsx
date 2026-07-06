@@ -2,7 +2,6 @@
 
 import * as React from "react";
 
-import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
@@ -10,6 +9,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
@@ -18,6 +18,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
@@ -31,6 +32,7 @@ import {
   GalleryVerticalEndIcon,
   MoreHorizontalIcon,
   PieChartIcon,
+  PlusCircleIcon,
   Settings2Icon,
   SettingsIcon,
   TerminalIcon,
@@ -38,11 +40,17 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import Link from "next/link";
-import { getChannelIcon } from "../constants/channels";
-import { ChannelType } from "../generated/prisma/enums";
+import { usePathname } from "next/navigation";
+import {
+  ChannelTypeEnum,
+  getChannelIcon,
+  getChannelUrl,
+} from "../constants/channels";
 import { useIsMobile } from "../hooks/use-mobile";
-import { toLabelValuePairs } from "../lib/utils";
+import { cn } from "../lib/utils";
 import { useTRPC } from "../trpc/client";
+import { ChannelAvatar } from "./channel-avatar";
+import { Button } from "./ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -200,22 +208,20 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const trpc = useTRPC();
   const isMobile = useIsMobile();
+  const pathname = usePathname();
 
   const { data: channelsData, isPending } = useSuspenseQuery(
-    trpc.userChannels.listByConnected.queryOptions({ filter: true }),
+    trpc.channels.list.queryOptions({ filter: "unconnected" }),
   );
 
-  const channels = channelsData.channels || [];
+  const channels = channelsData?.channels || [];
 
-  const unConnectedChannels = channels.filter(
-    (channel) => !channel.isConnected,
-  );
-  const connectedChannels = channels.filter((channel) => channel.isConnected);
+  const unconnectedChannels = channels.filter((channel) => !channel.connected);
+  const connectedChannels = channels.filter((channel) => channel.connected);
 
-  const connectedCount = channelsData.connectedCount || 0;
-  const totalChannels = Object.values(ChannelType).length || 0;
-
-  const channelTypes = toLabelValuePairs(Object.values(ChannelType));
+  const connectedCount = channelsData?.connectedCount || 0;
+  const totalChannels = channelsData?.totalChannels || 0;
+  const limitedChannels = unconnectedChannels.slice(0, 4);
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -224,7 +230,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         {/* <NavMain items={data.navMain} /> */}
-        <NavProjects projects={data.projects} />
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {data.projects.map((item) => (
+                <SidebarMenuItem key={item.name}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.url}
+                    tooltip={item.name}
+                  >
+                    <Link href={item.url}>
+                      {item.icon}
+                      <span>{item.name}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         {/* Connected channels */}
         {connectedChannels.length > 0 && (
           <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -234,51 +259,65 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <Skeleton className="h-8" />
                 <Skeleton className="h-8" />
                 <Skeleton className="h-8" />
+                <Skeleton className="h-8" />
               </div>
             ) : (
               <SidebarMenu>
-                {connectedChannels.map((item) => (
-                  <SidebarMenuItem key={item.channelType}>
-                    <SidebarMenuButton asChild>
-                      <Link href={`/channel/${item.channelType.toLowerCase()}`}>
-                        <HugeiconsIcon
-                          icon={getChannelIcon(item.channelType as ChannelType)!}
-                        />
-                        {item.channelType}
-                      </Link>
-                    </SidebarMenuButton>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <SidebarMenuAction
-                          showOnHover
-                          className="aria-expanded:bg-muted"
+                {connectedChannels.map((channel) => {
+                  const url = getChannelUrl(channel.type as ChannelTypeEnum);
+                  return (
+                    <SidebarMenuItem key={channel.type}>
+                      <SidebarMenuButton asChild>
+                        <Link
+                          target="_blank"
+                          rel="noreferrer"
+                          href={`${url}/${channel.handle}`}
+                          className="w-full! relative block items-center gap-2"
                         >
-                          <MoreHorizontalIcon />
-                          <span className="sr-only">More</span>
-                        </SidebarMenuAction>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        className="w-fit"
-                        side={isMobile ? "bottom" : "right"}
-                        align={isMobile ? "end" : "start"}
-                      >
-                        <DropdownMenuItem>
-                          <FolderIcon />
-                          <span>View Project</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <ArrowRightIcon />
-                          <span>Share Project</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive">
-                          <Trash2Icon />
-                          <span>Delete Project</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SidebarMenuItem>
-                ))}
+                          <ChannelAvatar
+                            size="sm"
+                            className=""
+                            type={channel.type as ChannelTypeEnum}
+                            color={channel.color}
+                            profileImage={channel.profile_image || undefined}
+                            name={channel.name}
+                          />
+                          {channel.type}
+                        </Link>
+                      </SidebarMenuButton>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <SidebarMenuAction
+                            showOnHover
+                            className="aria-expanded:bg-muted"
+                          >
+                            <MoreHorizontalIcon />
+                            <span className="sr-only">More</span>
+                          </SidebarMenuAction>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          className="w-fit"
+                          side={isMobile ? "bottom" : "right"}
+                          align={isMobile ? "end" : "start"}
+                        >
+                          <DropdownMenuItem>
+                            <FolderIcon />
+                            <span>View Project</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <ArrowRightIcon />
+                            <span>Share Project</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive">
+                            <Trash2Icon />
+                            <span>Delete Project</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             )}
           </SidebarGroup>
@@ -290,62 +329,117 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>Connect Channels</SidebarGroupLabel>
           {isPending ? (
             <div className="flex flex-col gap-2">
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
+              <Skeleton className="h-8 w-full bg-secondary" />
+              <Skeleton className="h-8 w-full bg-secondary" />
+              <Skeleton className="h-8 w-full bg-secondary" />
             </div>
           ) : (
             <SidebarMenu>
-              {channelTypes.map((item) => (
-                <SidebarMenuItem key={item.label}>
-                  <SidebarMenuButton asChild>
-                    <Link href={`/channel/${item.lowercase}`}>
-                      <HugeiconsIcon
-                        icon={getChannelIcon(item.value as ChannelType)!}
-                      />
-                      {item.label}
-                    </Link>
-                  </SidebarMenuButton>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <SidebarMenuAction
-                        showOnHover
-                        className="aria-expanded:bg-muted"
+              {limitedChannels.map((channel) => {
+                const icons = getChannelIcon(channel.type as ChannelTypeEnum);
+
+                return (
+                  <div key={channel.id}>
+                    <SidebarMenuItem key={channel.id}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={`Connect ${channel.name}`}
                       >
-                        <MoreHorizontalIcon />
-                        <span className="sr-only">More</span>
-                      </SidebarMenuAction>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      className="w-fit"
-                      side={isMobile ? "bottom" : "right"}
-                      align={isMobile ? "end" : "start"}
+                        <button
+                          className="flex items-center gap-2"
+                        >
+                          <span>
+                            <div className="relative">
+                              {icons ? (
+                                <HugeiconsIcon
+                                  icon={icons}
+                                  color="currentColor"
+                                  className="text-white! size-8! p-2 rounded-sm"
+                                  style={{
+                                    background: channel.color,
+                                  }}
+                                />
+                              ) : null}
+                              <div
+                                className={cn(
+                                  "absolute -right-1 bottom-0 p-0.5 bg-white dark:bg-background rounded-xs",
+                                )}
+                              >
+                                <HugeiconsIcon
+                                  icon={PlusSignIcon}
+                                  className="size-2!"
+                                />
+                              </div>
+                            </div>
+                          </span>
+                          <span
+                            className="
+                        truncate
+                        "
+                          >
+                            {channel.name}
+                          </span>
+                        </button>
+                      </SidebarMenuButton>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <SidebarMenuAction
+                            showOnHover
+                            className="aria-expanded:bg-muted"
+                          >
+                            <MoreHorizontalIcon />
+                            <span className="sr-only">More</span>
+                          </SidebarMenuAction>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          className="w-fit"
+                          side={isMobile ? "bottom" : "right"}
+                          align={isMobile ? "end" : "start"}
+                        >
+                          <DropdownMenuItem>
+                            <FolderIcon />
+                            <span>View Project</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <ArrowRightIcon />
+                            <span>Share Project</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive">
+                            <Trash2Icon />
+                            <span>Delete Project</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </SidebarMenuItem>
+                  </div>
+                );
+              })}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Button
+                    variant={"ghost"}
+                    asChild
+                    className="w-full justify-start mt-2"
+                  >
+                    <Link
+                      href={"/settings"}
+                      className="w-full flex items-center gap-2"
                     >
-                      <DropdownMenuItem>
-                        <FolderIcon />
-                        <span>View Project</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <ArrowRightIcon />
-                        <span>Share Project</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem variant="destructive">
-                        <Trash2Icon />
-                        <span>Delete Project</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </SidebarMenuItem>
-              ))}
+                      <PlusCircleIcon className="size-4!" />
+                      <span className="truncate">More Channels</span>
+                    </Link>
+                  </Button>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           )}
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mb-3 text-xs text-muted-foreground">
           <span className="">
-            {connectedChannels.length}/{totalChannels} channels connected
+            {connectedCount}/{totalChannels} channels connected
           </span>
         </div>
         <NavUser user={data.user} />

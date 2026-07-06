@@ -23,12 +23,11 @@ model User {
   lastActiveOrganizationId String? // denormalized pointer, not a hard FK constraint
   sessions                 Session[]
   accounts                 Account[]
-  organizations            OrganizationMember[]
-  channels                 UserChannels[]
-  schedulePosts            SchedulePosts[]
-  ideas                    Idea[]
-  metaConnection           MetaConnection?
-  metaOAuthStates          MetaOAuthState[]
+
+  userChannels              UserChannel[]
+  ideas                     Idea[]
+  scheduledPosts            ScheduledPost[]
+  subscriptions             Subscription[]
 
   @@unique([email])
   @@map("user")
@@ -81,203 +80,124 @@ model Verification {
   @@map("verification")
 }
 
-model Organization {
-  id      String               @id @default(cuid())
-  name    String
-  members OrganizationMember[]
+// ==========================================
+// 2. SOCIAL CHANNELS SYSTEM
+// ==========================================
 
-  @@map("organization")
+/// Seeded lookup table for supported networks
+model ChannelType {
+  id                       String               @id
+  type           String        @unique // e.g., "TWITTER", "LINKEDIN"
+  name           String        // e.g., "Twitter / X", "LinkedIn"
+  color          String        // Hex or Tailwind color class
+  characterLimit Int           @default(2200) @map("character_limit")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  userChannels   UserChannel[]
+
+  @@map("channel_types")
 }
 
-model OrganizationMember {
-  id             String       @id @default(cuid())
-  userId         String
-  organizationId String
-  role           Role         @default(MEMBER) // OWNER, ADMIN, MEMBER
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+/// Tracks authenticated user social media handles and credentials
+model UserChannel {
+  id                       String               @id
+  userId        String          
+  channelTypeId String          @map("channel_type_id")
+  handle        String      
+  profileImage  String?         @map("profile_image") 
+  profileUrl    String?         @map("profile_url")
+  accessToken   String          @map("access_token")  
+  isConnected   Boolean         @default(true) @map("is_connected")
+  isActive      Boolean         @default(true) @map("is_active")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  
+  // Relations
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelType    ChannelType     @relation(fields: [channelTypeId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, organizationId])
-  @@index([organizationId])
-  @@map("organization_member")
-}
+  scheduledPosts ScheduledPost[]
 
-model UserChannels {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  channelType ChannelType
-
-  handle       String
-  profileImage String
-  accessToken  String
-  isConnected  Boolean
-  isActive     Boolean
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  schedulePosts SchedulePosts[]
-
-  @@index([userId])
-  @@index([channelType])
   @@map("user_channels")
 }
 
-model SchedulePosts {
-  id String @id @default(cuid())
+// ==========================================
+// 3. KANBAN BOARD / CONTENT IDEAS
+// ==========================================
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// Lookup seed table for the Kanban board columns
+model IdeaGroup {
+  id        String   @id @default(uuid())
+  name      String   @unique // "Unassigned", "To Do", "In Progress", "Done"
+  createdAt DateTime @default(now()) @map("created_at")
+  ideas     Idea[]
 
-  userChannelId String
-  userChannel   UserChannels @relation(fields: [userChannelId], references: [id], onDelete: Cascade)
-
-  content    String
-  images     String[]
-  scheduleAt DateTime
-  timezone   String
-  status     PostStatus
-  publishAt  DateTime?
-  publishUrl String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userChannelId])
-  @@map("schedule_posts")
+  @@map("idea_groups")
 }
 
-/// A saved post brief — what the user filled into the Post Generator form,
-/// plus whatever drafts were last generated for it. Ideas belong to a single
-/// user; there is no sharing/collaboration model here yet.
+/// Stores brainstorming content cards managed on the Kanban board
 model Idea {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  groupId     String    @map("group_id")
+  title       String
+  description String?   @db.Text
+  images      String[]  @default([]) // Array of image URLs hosted via Insforge storage
+  tags        String[]  @default([])
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  // --- Brief fields (1:1 with PostBrief in post-schema.ts) ---------------
-  title        String // user-facing name for this saved idea, NOT part of PostBrief
-  businessName String?
-  niche        String
-  audience     String?
+  // Relations
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group IdeaGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
 
-  platforms Platform[] // Postgres native array of the enum above
-  postType  PostType
-  tone      Tone
-  postCount Int        @default(1)
-
-  keyDetails String?
-  cta        String?
-
-  includeHashtags Boolean @default(true)
-  includeEmojis   Boolean @default(true)
-
-  // --- Last-generated drafts, if any --------------------------------------
-  // Stored as JSON rather than a separate table: drafts are a snapshot tied
-  // to one generation run, not independently queried/updated entities.
-  // Shape: GeneratedPost[] from post-schema.ts, i.e.
-  //   [{ id: string, platform: Platform, content: string }, ...]
-  generatedPosts Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, createdAt])
+  @@map("ideas")
 }
 
-model MetaConnection {
-  id             String     @id @default(cuid())
-  userId         String     @unique
-  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status         String     @default("ACTIVE") // ACTIVE, NEEDS_REAUTH, EXPIRED, etc.
-  accessTokenEnc String     @db.Text // encrypted long-lived user token
-  tokenExpiresAt DateTime? // optional: when the token expires (may be far in the future or null if non-expiring)
-  lastSyncedAt   DateTime? // when we last fetched pages
-  lastError      String?    @db.Text
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  pages          MetaPage[]
+// ==========================================
+// 4. POST SCHEDULING ENGINE
+// ==========================================
+
+/// Holds items queued up for the Inngest cron automated publishing jobs
+model ScheduledPost {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  userChannelId String    @map("user_channel_id")
+  content       String    @db.Text
+  images        String[]  @default([])
+  scheduledAt   DateTime  @map("scheduled_at")
+  timezone      String    @default("UTC")
+  status        String    @default("PENDING") // e.g., PENDING, PUBLISHED, FAILED
+  publishedAt   DateTime? @map("published_at")
+  publishedUrl  String?   @map("published_url") // Direct link back to live social post
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userChannel UserChannel @relation(fields: [userChannelId], references: [id], onDelete: Cascade)
+
+  @@map("scheduled_posts")
 }
 
-model MetaPage {
-  id                         String         @id @default(cuid())
-  connectionId               String
-  connection                 MetaConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  pageId                     String         @unique // Facebook Page numeric ID
-  pageName                   String
-  accessTokenEnc             String         @db.Text // encrypted page access token (long-lived)
-  instagramBusinessAccountId String? // optional Instagram linked account ID
-  category                   String? // optional page category
-  createdAt                  DateTime       @default(now())
-  updatedAt                  DateTime       @updatedAt
-}
+// ==========================================
+// 5. BILLING & MONETIZATION
+// ==========================================
 
-model MetaOAuthState {
-  id            String   @id @default(cuid())
-  state         String   @unique
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  redirectAfter String? // URL to redirect after OAuth callback
-  expiresAt     DateTime
-  createdAt     DateTime @default(now())
-}
+/// Manages multi-tier application access restrictions (Free, Pro, Premium)
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  stripeCustomerId     String    @map("stripe_customer_id")
+  stripeSubscriptionId String    @map("stripe_subscription_id")
+  planTier             String    @default("FREE") @map("plan_tier") // FREE, PRO, PREMIUM
+  status               String    @map("status") // active, canceled, past_due
+  currentPeriodEnd     DateTime  @map("current_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-enum ChannelType {
-  INSTAGRAM
-  FACEBOOK
-  TWITTER
-}
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-enum Platform {
-  INSTAGRAM
-  FACEBOOK
-  TWITTER
-  LINKEDIN
-  TIKTOK
-}
-
-enum PostStatus {
-  DRAFT
-  SCHEDULED
-  PUBLISHING
-  PUBLISHED
-  FAILED
-  PARTIALLY_PUBLISHED
-}
-
-enum PostType {
-  PROMOTIONAL
-  ANNOUNCEMENT
-  ENGAGEMENT
-  EDUCATIONAL
-  BEHIND_THE_SCENES
-  TESTIMONIAL
-  SEASONAL
-}
-
-enum Role {
-  OWNER
-  ADMIN
-  MEMBER
-}
-
-enum SocialAccountStatus {
-  NEEDS_RECONNECTION
-  CONNECTED
-}
-
-/// Mirrors the `Tone` union driving TONE_META.
-enum Tone {
-  PROFESSIONAL
-  CASUAL
-  PLAYFUL
-  LUXURY
-  URGENT
-  BOLD
-  FRIENDLY
-  WITTY
+  @@map("subscriptions")
 }

@@ -1,10 +1,6 @@
-"use client"
+"use client";
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,25 +9,35 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+} from "@/components/ui/sidebar";
+import {
+  BellIcon,
+  ChevronsUpDownIcon,
+  CreditCardIcon,
+  DoorClosed,
+  LogOutIcon,
+  UserIcon,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { signOut } from "../lib/auth-client";
 
 export function NavUser({
   user,
 }: {
   user: {
-    name: string
-    email: string
-    avatar: string
-  }
+    name: string;
+    email: string;
+    avatar: string;
+  };
 }) {
-  const { isMobile } = useSidebar()
+  const { isMobile } = useSidebar();
+  const router = useRouter();
 
   return (
     <SidebarMenu>
@@ -74,38 +80,46 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
+                <UserIcon />
+                Profile
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <BadgeCheckIcon
-                />
-                Account
+                <button
+                  className="flex justify-start gap-2"
+                  onClick={() =>
+                    signOut({
+                      fetchOptions: {
+                        onSuccess: () => {
+                          router.push("/sign-in");
+                        },
+                      },
+                    })
+                  }
+                >
+                  <DoorClosed />
+                  Logout
+                </button>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <CreditCardIcon
-                />
+                <CreditCardIcon />
                 Billing
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <BellIcon
-                />
+                <BellIcon />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <LogOutIcon
-              />
+              <LogOutIcon />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }

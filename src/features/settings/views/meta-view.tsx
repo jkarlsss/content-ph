@@ -28,7 +28,7 @@ export function MetaConnectCard() {
 
   async function handleConnect() {
     const { url } = await getConnectUrl.mutateAsync({
-      redirectAfter: "/settings/integrations",
+      redirectAfter: "/ideas?dialog=open", // optional, where to go after the OAuth flow completes
     });
     window.location.href = url; // full redirect — this leaves your SPA
   }
@@ -61,7 +61,7 @@ export function MetaConnectCard() {
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <Badge variant={data.status === "ACTIVE" ? "default" : "destructive"}>
+              <Badge variant={data.status === "ACTIVE" ? "success" : "danger"}>
                 {data.status}
               </Badge>
               {data.status === "NEEDS_REAUTH" && (

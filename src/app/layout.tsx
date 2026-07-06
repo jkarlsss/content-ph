@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import { Toaster } from "sonner";
+import { ThemeProvider } from "../components/theme-provider";
 import { TooltipProvider } from "../components/ui/tooltip";
 import { TRPCReactProvider } from "../trpc/client";
 import "./globals.css";
@@ -30,6 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
+      suppressHydrationWarning
       lang="en"
       className={cn(
         "h-full",
@@ -43,7 +45,14 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <TRPCReactProvider>
           <TooltipProvider>
-            {children}
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+            </ThemeProvider>
             <Toaster />
           </TooltipProvider>
         </TRPCReactProvider>
